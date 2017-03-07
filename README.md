@@ -127,7 +127,7 @@ Ubuntu 14.04 LTS</br>
      - On Default SSH key list box, select your own Key Pair mentioned in Step 5.
      - On Use custom Chef cookbooks, select yes.
          - On Repository type list box, select Git.
-         - On Repository URL, type 'https://github.com:centrify/AWS-Opsworks.git'
+         - On Repository URL, type 'https://github.com/centrify/AWS-Opsworks.git'
      - Click Advanced link and make sure:
          - On IAM role box, select the IAM role you created in Step 4.
          - On Default IAM instance profile box, select your IAM role created in Step 4.
