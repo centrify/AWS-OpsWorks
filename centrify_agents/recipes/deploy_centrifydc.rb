@@ -242,7 +242,7 @@ if $CENTRIFYDC_JOIN_TO_AD == 'yes'
       login_keytab=#{local_keytab}
       domain_name=`/usr/share/centrifydc/kerberos/bin/klist -k $login_keytab | grep '@' | cut -d '@' -f 2 | sed -n '1p' | tr -d '\n' `
       adlicense -l
-      adjoin $domain_name -z #{$CENTRIFYDC_ZONE_NAME} --name `hostname` #{$CENTRIFYDC_ADJOIN_ADDITIONAL_OPTIONS}
+      adjoin $domain_name -z #{$CENTRIFYDC_ZONE_NAME} --name `hostname` --force #{$CENTRIFYDC_ADJOIN_ADDITIONAL_OPTIONS}
       r=$?
 	  rm $login_keytab
       [ $r -ne 0 ] && echo "adjoin failed!" && exit $r
@@ -291,7 +291,7 @@ bash 'enable_sshd_password_auth' do
           ;;
         *)
           if [ "$need_config_ssh" = "centrifydc" ];then
-            sshd_name=centrify-opensshd
+            sshd_name=centrify-sshd
           else
             sshd_name=sshd
           fi

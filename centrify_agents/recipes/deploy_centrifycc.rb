@@ -28,13 +28,14 @@ $CENTRIFYCC_FEATURES = ''
 $CENTRIFYCC_NETWORK_ADDR_TYPE = ''
 $CENTRIFYCC_COMPUTER_NAME_PREFIX = ''
 $CENTRIFYCC_CENROLL_ADDITIONAL_OPTIONS = ''
+$CENTRIFYCC_AGENT_SETS = ''
 $network_addr = ''
 $ec2_instance_id = ''
 
-all_attribute = ["CENTRIFYCC_TENANT_URL","CENTRIFYCC_ENROLLMENT_CODE","CENTRIFYCC_AGENT_AUTH_ROLES","CENTRIFYCC_FEATURES","CENTRIFYCC_NETWORK_ADDR_TYPE","CENTRIFYCC_COMPUTER_NAME_PREFIX"]
+all_attribute = ["CENTRIFYCC_TENANT_URL","CENTRIFYCC_ENROLLMENT_CODE","CENTRIFYCC_AGENT_AUTH_ROLES","CENTRIFYCC_FEATURES","CENTRIFYCC_NETWORK_ADDR_TYPE","CENTRIFYCC_COMPUTER_NAME_PREFIX", "CENTRIFYCC_AGENT_SETS"]
 
 ### Check attributes ###
-check_cc_attr = ["CENTRIFY_REPO_CREDENTIAL", "CENTRIFYCC_TENANT_URL", "CENTRIFYCC_ENROLLMENT_CODE", "CENTRIFYCC_AGENT_AUTH_ROLES", "CENTRIFYCC_FEATURES", "CENTRIFYCC_NETWORK_ADDR_TYPE", "CENTRIFYCC_COMPUTER_NAME_PREFIX" ]
+check_cc_attr = ["CENTRIFY_REPO_CREDENTIAL", "CENTRIFYCC_TENANT_URL", "CENTRIFYCC_ENROLLMENT_CODE", "CENTRIFYCC_FEATURES", "CENTRIFYCC_NETWORK_ADDR_TYPE", "CENTRIFYCC_COMPUTER_NAME_PREFIX"]
 check_cc_attr.each do |attr|
   if node[attr].class != String
     raise "#{attr} must be a string type!"
@@ -49,10 +50,36 @@ if node['CENTRIFYCC_ENROLLMENT_CODE'].empty?
   raise 'CENTRIFYCC_ENROLLMENT_CODE cannot be empty'
 end
 $CENTRIFYCC_ENROLLMENT_CODE = node['CENTRIFYCC_ENROLLMENT_CODE']
-if node['CENTRIFYCC_AGENT_AUTH_ROLES'].empty?
-  raise 'CENTRIFYCC_AGENT_AUTH_ROLES cannot be empty'
+
+$CENTRIFYCC_AGENT_SETS = ''
+if !node['CENTRIFYCC_AGENT_SETS'].nil?
+  if !node['CENTRIFYCC_AGENT_SETS'].empty? 
+    if node['CENTRIFYCC_AGENT_SETS'].class != String
+      raise "CENTRIFYCC_AGENT_SETS must be a string type!"
+    else
+      $CENTRIFYCC_AGENT_SETS = node['CENTRIFYCC_AGENT_SETS']
+    end
+  end
 end
-$CENTRIFYCC_AGENT_AUTH_ROLES = node['CENTRIFYCC_AGENT_AUTH_ROLES'] 
+
+$CENTRIFYCC_AGENT_AUTH_ROLES = ''
+if !node['CENTRIFYCC_AGENT_AUTH_ROLES'].nil?
+  if !node['CENTRIFYCC_AGENT_AUTH_ROLES'].empty? 
+    if node['CENTRIFYCC_AGENT_AUTH_ROLES'].class != String
+      raise "CENTRIFYCC_AGENT_AUTH_ROLES must be a string type!"
+    else
+      $CENTRIFYCC_AGENT_AUTH_ROLES = node['CENTRIFYCC_AGENT_AUTH_ROLES']
+    end
+  end
+end
+
+if $CENTRIFYCC_AGENT_SETS == '' && $CENTRIFYCC_AGENT_AUTH_ROLES == '' 
+  raise 'CENTRIFYCC_AGENT_AUTH_ROLES and CENTRIFYCC_AGENT_SETS cannot both be empty'
+end
+
+puts "CENTRIFYCC_AGENT_SETS: #{$CENTRIFYCC_AGENT_SETS}"
+puts "CENTRIFYCC_AGENT_AUTH_ROLES: #{$CENTRIFYCC_AGENT_AUTH_ROLES}"
+
 if node['CENTRIFYCC_FEATURES'].empty?
   raise 'CENTRIFYCC_FEATURES cannot be empty'
 end
@@ -67,6 +94,19 @@ if instance.nil? || instance['instance_id'].nil? || instance['instance_id'].empt
    raise "Can't retrieve aws instance id"
 end
 $ec2_instance_id = instance['instance_id']
+
+# set up hostname
+$host_name = `hostname --fqdn`
+if $host_name.nil? || $host_name.empty?
+  $host_name = `hostname`
+end
+if $host_name.nil? || $host_name.empty?
+  raise "Can't retrieve host name"
+end
+# remove .localdomain from hostname
+$host_name.chomp!
+$host_name.chomp!(".localdomain")
+	
 case $CENTRIFYCC_NETWORK_ADDR_TYPE
   when 'PublicIP'
     $public_ip = instance['public_ip']
@@ -83,16 +123,7 @@ case $CENTRIFYCC_NETWORK_ADDR_TYPE
       $network_addr = $private_ip
     end
   when 'HostName'
-    $host_name = `hostname --fqdn`
-    if $host_name.nil? || $host_name.empty?
-	  $host_name = `hostname`
-	end
-	if $host_name.nil? || $host_name.empty?
-		raise "Can't retrieve host name for CENTRIFYCC_NETWORK_ADDR_TYPE"
-    else
-	  $host_name = $host_name.strip
       $network_addr = $host_name
-    end
   else
     raise "Invalid CENTRIFYCC_NETWORK_ADDR_TYPE: #{$CENTRIFYCC_NETWORK_ADDR_TYPE}"
 end
@@ -236,7 +267,7 @@ bash 'enable_sshd_password_auth' do
           ;;
         *)
           if [ "$need_config_ssh" = "centrifydc" ];then
-            sshd_name=centrify-opensshd
+            sshd_name=centrify-sshd
           else
             sshd_name=sshd
           fi
@@ -258,15 +289,40 @@ end
 bash 'start_enroll' do
   code <<-EOH
     set -x
+	CMDPARAM=()
+	AGENT_AUTH_ROLES="#{$CENTRIFYCC_AGENT_AUTH_ROLES}"
+	
+	if [ "$AGENT_AUTH_ROLES" != "" ] ; then
+	  CMDPARAM=("--agentauth" "#{$CENTRIFYCC_AGENT_AUTH_ROLES}")
+	  # grant permssion to view
+	  IFS=","
+	  for role in $AGENT_AUTH_ROLES
+	  do
+	    CMDPARAM=("${CMDPARAM[@]}" "--resource-permission" "role:$role:View")
+	  done
+	fi
+	
+	# set up add to set
+	AGENT_SETS="#{$CENTRIFYCC_AGENT_SETS}"
+	if [ "$AGENT_SETS" != "" ] ; then 
+	   CMDPARAM=("${CMDPARAM[@]}" "--resource-set" "${AGENT_SETS[@]}")
+	fi
+	
+	# for additional options, need to parse into array
+	AGENT_OPTIONS="#{$CENTRIFYCC_CENROLL_ADDITIONAL_OPTIONS}"
+	if [ "$AGENT_OPTIONS" != "" ] ; then
+	  IFS=' ' read -a tempoption <<< "${AGENT_OPTIONS}"
+	  CMDPARAM=("${CMDPARAM[@]}" "${tempoption[@]}")
+	fi
+	
     /usr/share/centrifycc/bin/cdebug on
     /usr/sbin/cenroll --verbose \
         --tenant "#{$CENTRIFYCC_TENANT_URL}" \
         --code "#{$CENTRIFYCC_ENROLLMENT_CODE}" \
-        --agentauth "#{$CENTRIFYCC_AGENT_AUTH_ROLES}" \
         --features "#{$CENTRIFYCC_FEATURES}" \
         --name "#{computer_name}" \
         --address "#{$network_addr}" \
-        #{$CENTRIFYCC_CENROLL_ADDITIONAL_OPTIONS}
+        "${CMDPARAM[@]}"
          
     r=$?
     [ $r -ne 0 ] && echo "cenroll failed!" && exit $r

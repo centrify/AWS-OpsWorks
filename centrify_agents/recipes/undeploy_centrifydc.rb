@@ -91,11 +91,15 @@ bash 'uninstall_centrifydc' do
     case #{node[:platform]} in
       redhat|centos|amazon)
         yum erase CentrifyDC -y
-        yum list installed | grep 'CentrifyDC\.' >/dev/null
+        yum erase CentrifyDC-openldap -y
+        yum erase CentrifyDC-openssl -y
+        yum list installed | grep 'CentrifyDC' >/dev/null
         [ $? -eq 0 ] && r=1
         ;;
       ubuntu)
         apt-get -y remove centrifydc
+        apt-get -y remove centrifydc-openldap
+        apt-get -y remove centrifydc-openssl
         apt-get -y clean >/dev/null
         apt-get -y update >/dev/null
         dpkg --get-selections | grep -w install | grep -w centrifydc >/dev/null
