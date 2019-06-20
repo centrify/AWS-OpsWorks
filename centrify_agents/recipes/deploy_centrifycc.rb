@@ -18,7 +18,7 @@
 
 $TEMP_DEPLOY_DIR = '/tmp/auto_centrify_deployment'
 $CENTRIFY_REPO_CREDENTIAL = ''
-$CENTRIFYCC_DOWNLOAD_PREFIX='http://edge.centrify.com/products/cloud-service/CliDownload/Centrify'
+$CENTRIFYCC_DOWNLOAD_PREFIX='https://edge.centrify.com/products/cloud-service/CliDownload/Centrify'
 $CENTRIFYCC_RPM_NAME=''
 
 $CENTRIFYCC_TENANT_URL = ''
@@ -255,6 +255,59 @@ bash 'enable_sshd_password_auth' do
       [ ! -f $backup_conf ] && cp $src_conf $backup_conf
       /bin/sed -i -r 's/^PasswordAuthentication[[:space:]][[:space:]]*no[[:space:]]*$/#PasswordAuthentication no/g' $src_conf
       [ $? -ne 0 ] && echo "Comment PasswordAuthentication failed!" && exit 1
+      r=1
+      case "#{node[:platform]}" in
+        ubuntu)
+          if [ "$need_config_ssh" = "centrifydc" ];then
+            service centrify-sshd restart 
+          else
+            service ssh restart
+          fi
+          r=$?
+          ;;
+        *)
+          if [ "$need_config_ssh" = "centrifydc" ];then
+            sshd_name=centrify-sshd
+          else
+            sshd_name=sshd
+          fi
+          if [ -x /usr/bin/systemctl ]; then
+            systemctl restart $sshd_name.service
+          else
+            /etc/init.d/$sshd_name restart
+          fi
+          r=$?
+          ;;
+      esac
+      exit $r
+    fi
+    exit 0
+  EOH
+  timeout 10
+end
+
+bash 'enable_sshd_challenge_response_auth' do
+  code <<-EOH
+    set -x
+    need_config_ssh=''
+    if test -x /usr/share/centrifydc/sbin/sshd ;then
+      if grep -E '^ChallengeResponseAuthentication[[:space:]][[:space:]]*no[[:space:]]*$' /etc/centrifydc/ssh/sshd_config >/dev/null ; then
+        need_config_ssh='centrifydc'
+        src_conf=/etc/centrifydc/ssh/sshd_config
+        backup_conf=/etc/centrifydc/ssh/sshd_config.deploy_backup
+      fi
+    else
+      if grep -E '^ChallengeResponseAuthentication[[:space:]][[:space:]]*no[[:space:]]*$' /etc/ssh/sshd_config >/dev/null ; then
+        need_config_ssh='stock'
+        src_conf=/etc/ssh/sshd_config
+        backup_conf=/etc/ssh/sshd_config.centrify_backup
+      fi
+    fi
+    r=0
+    if [ "x$need_config_ssh" != "x" ];then
+      [ ! -f $backup_conf ] && cp $src_conf $backup_conf
+      /bin/sed -i -r 's/^ChallengeResponseAuthentication[[:space:]][[:space:]]*no[[:space:]]*$/ChallengeResponseAuthentication yes/g' $src_conf
+      [ $? -ne 0 ] && echo "Update ChallengeResponseAuthentication failed!" && exit 1
       r=1
       case "#{node[:platform]}" in
         ubuntu)
