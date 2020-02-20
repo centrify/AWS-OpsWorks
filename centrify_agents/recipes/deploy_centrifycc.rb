@@ -165,7 +165,7 @@ case node[:platform]
 when "redhat", "amazon", "centos"
   $CENTRIFYCC_RPM_NAME="CentrifyCC-rhel6.x86_64.rpm"
 when "ubuntu"
-  $CENTRIFYCC_RPM_NAME="centrifycc-deb7-x86_64.deb"
+  $CENTRIFYCC_RPM_NAME="centrifycc-deb8-x86_64.deb"
 else
    raise "Cannot resolve rpm package name for centrifycc on current OS #{node[:platform]}"
 end      
