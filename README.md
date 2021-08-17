@@ -136,15 +136,14 @@ Ubuntu 14.04 LTS</br>
     Following is an example of Custom JSON:</br>
 ```
     {
-        "CENTRIFY_REPO_CREDENTIAL":"XXXX111111111111111111111XXX22%40centrify:3333333333333333333333444444444444444444",
-        "CENTRIFYCC_TENANT_URL": "myurl.centrify.com",
+        "CENTRIFYDC_UBUNTU_TOKEN":"",
+        "CENTRIFYDC_REDHAT_TOKEN":"",
         "CENTRIFYCC_ENROLLMENT_CODE": "88888888-4000-1000-0444-88888888",
         "CENTRIFYCC_AGENT_AUTH_ROLES": "Agent_loginrole1",
         "CENTRIFYCC_FEATURES": "aapm,agentauth",
         "CENTRIFYCC_NETWORK_ADDR_TYPE": "PrivateIP",
         "CENTRIFYCC_COMPUTER_NAME_PREFIX": "",
         "CENTRIFYCC_CENROLL_ADDITIONAL_OPTIONS": "--resource-setting ProxyUser:centrify",
-        
         "CENTRIFYDC_JOIN_TO_AD": "yes",
         "CENTRIFYDC_ZONE_NAME": "zone2",
         "CENTRIFYDC_KEYTAB_S3_BUCKET": "centrify-bucket",
@@ -209,8 +208,11 @@ Scenario 3.    Install CentrifyCC and CentrifyDC, run cenroll and adjoin
 
 # Explaining Attributes of Custom JSON
         
-        CENTRIFY_REPO_CREDENTIAL:
-        // The user name and password required to access Centrify repository.  Cannot be empty.
+        CENTRIFYDC_UBUNTU_TOKEN:
+        // Token required to access Centrify repository for Ubuntu Machine.  Required for Ubuntu Machine.
+        
+        CENTRIFYDC_REDHAT_TOKEN:
+        // Token required to access Centrify repository for RHEL/Linux/CentOS Machine.  Required for RHEL/Linux/CentOS Machine.
         
         CENTRIFYCC_TENANT_URL: 
         // The CIP instance to enroll to.  Cannot be empty.

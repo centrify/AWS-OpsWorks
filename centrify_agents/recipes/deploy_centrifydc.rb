@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright 2017 Centrify Corporation
+# Copyright 2021 Centrify Corporation
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@
 
 $TEMP_DEPLOY_DIR='/tmp/auto_centrify_deployment/centrifydc'
 local_keytab=$TEMP_DEPLOY_DIR+"/login.keytab"
-$CENTRIFY_REPO_CREDENTIAL=''
 
 $CENTRIFYDC_JOIN_TO_AD='no'
 $CENTRIFYDC_ZONE_NAME=''
@@ -28,6 +27,8 @@ $CENTRIFYDC_ADJOIN_ADDITIONAL_OPTIONS = ''
 $s3_bucket_region = ''
 $centrifydc_pkgs=''
 $krb5_cache_lifetime='10m'
+$CENTRIFY_UBUNTU_TOKEN=''
+$CENTRIFY_REDHAT_TOKEN=''
 
 case node[:platform] 
   when 'redhat','centos','amazon','ubuntu'
@@ -37,7 +38,7 @@ case node[:platform]
 end
 
 ### Check attributes ###
-check_dc_attr = ['CENTRIFYDC_JOIN_TO_AD', 'CENTRIFYDC_ZONE_NAME', 'CENTRIFY_REPO_CREDENTIAL', 'CENTRIFYDC_ADDITIONAL_PACKAGES', 'CENTRIFYDC_KEYTAB_S3_BUCKET']
+check_dc_attr = ['CENTRIFYDC_JOIN_TO_AD', 'CENTRIFYDC_ZONE_NAME', 'CENTRIFYDC_ADDITIONAL_PACKAGES', 'CENTRIFYDC_KEYTAB_S3_BUCKET']
 # Must be a type of String 
 check_dc_attr.each do |attr|
   if node[attr].class != String
@@ -50,11 +51,13 @@ if !(["yes", "no"].include? node['CENTRIFYDC_JOIN_TO_AD'])
   raise 'Must set CENTRIFYDC_JOIN_TO_AD to yes or no'
 end
 
-$CENTRIFY_REPO_CREDENTIAL = node['CENTRIFY_REPO_CREDENTIAL']
-if $CENTRIFY_REPO_CREDENTIAL.empty?
-  raise "Can't find any valid definition of the CENTRIFY_REPO_CREDENTIAL attribute"
-end
+$CENTRIFY_REDHAT_TOKEN = node['CENTRIFY_REDHAT_TOKEN']
 
+$CENTRIFY_UBUNTU_TOKEN = node['CENTRIFY_UBUNTU_TOKEN']
+
+if ($CENTRIFY_REDHAT_TOKEN.empty?) && ($CENTRIFY_UBUNTU_TOKEN.empty?)
+  raise "Can't find any token for Centrify repo"
+end
 # Check CENTRIFYDC_ADDITIONAL_PACKAGES
 if !node['CENTRIFYDC_ADDITIONAL_PACKAGES'].empty?
   $CENTRIFYDC_ADDITIONAL_PACKAGES = node['CENTRIFYDC_ADDITIONAL_PACKAGES'].downcase
@@ -162,36 +165,39 @@ end
 bash 'generate_repo' do
   case node[:platform]
   when 'redhat','centos','amazon'
+    if $CENTRIFY_REDHAT_TOKEN.empty?
+      raise "Can't find any RED HAT token for Centrify repo"
+    end
     code <<-EOH
       set -x
       cat >/etc/yum.repos.d/centrify.repo <<END
 [centrify]
 name=centrify
-baseurl=https://#{$CENTRIFY_REPO_CREDENTIAL}@repo.centrify.com/rpm-redhat/
+baseurl=https://cloudrepo.centrify.com/#{$CENTRIFY_REDHAT_TOKEN}/rpm-redhat/rpm/any-distro/any-version/\\$basearch
 enabled=1
 repo_gpgcheck=1
 gpgcheck=1
-gpgkey=https://edge.centrify.com/products/RPM-GPG-KEY-centrify 
+gpgkey=https://downloads.centrify.com/products/RPM-GPG-KEY-centrify 
 END
     rm -rf /var/cache/yum/*
     yum -y clean all
     yum repolist -y
     EOH
   when 'ubuntu'
+    if $CENTRIFY_UBUNTU_TOKEN.empty?
+      raise "Can't find any UBUNTU token for Centrify repo"
+    end
     code <<-EOH
       set -x
-      bash -c 'wget -O - https://edge.centrify.com/products/RPM-GPG-KEY-centrify | apt-key add -'
+      bash -c 'wget -O - https://downloads.centrify.com/products/RPM-GPG-KEY-centrify | apt-key add -'
       [ ! -f /etc/dpkg/dpkg.cfg.centrify_backup ] && cp /etc/dpkg/dpkg.cfg /etc/dpkg/dpkg.cfg.centrify_backup
-      if grep -E "^[[:space:]]*no-debsig" /etc/dpkg/dpkg.cfg ;then
-        sed -i -r 's/^[[:space:]]*no-debsig[[:space:]]*$/#no-debsig/' /etc/dpkg/dpkg.cfg
-        [ $? -ne 0 ] && exit 1
-      fi
-      src_repo="deb https://#{$CENTRIFY_REPO_CREDENTIAL}@repo.centrify.com/deb stable main" 
-      if grep '@repo.centrify.com/deb stable main' /etc/apt/sources.list; then
-        sed -i "/@repo\.centrify\.com\\/deb stable main/d" /etc/apt/sources.list
-        [ $? -ne 0 ] && exit 1
-      fi
+      sed -i -r 's/^[[:space:]]*no-debsig[[:space:]]*$/#no-debsig/' /etc/dpkg/dpkg.cfg
+      [ $? -ne 0 ] && exit 1
+      src_repo="deb https://cloudrepo.centrify.com/#{$CENTRIFY_UBUNTU_TOKEN}/deb/deb/ubuntu any-version main" 
+      sed -i "/cloudrepo\.centrify\.com/d" /etc/apt/sources.list
+      [ $? -ne 0 ] && exit 1
       echo "$src_repo" >> /etc/apt/sources.list
+      mv /etc/dpkg/dpkg.cfg.centrify_backup /etc/dpkg/dpkg.cfg
       apt-get -y clean
       apt-get -y update
     EOH
@@ -279,6 +285,59 @@ bash 'enable_sshd_password_auth' do
       [ ! -f $backup_conf ] && cp $src_conf $backup_conf
       /bin/sed -i -r 's/^PasswordAuthentication[[:space:]][[:space:]]*no[[:space:]]*$/#PasswordAuthentication no/g' $src_conf
       [ $? -ne 0 ] && echo "Comment PasswordAuthentication failed!" && exit 1
+      r=1
+      case "#{node[:platform]}" in
+        ubuntu)
+          if [ "$need_config_ssh" = "centrifydc" ];then
+            service centrify-sshd restart 
+          else
+            service ssh restart
+          fi
+          r=$?
+          ;;
+        *)
+          if [ "$need_config_ssh" = "centrifydc" ];then
+            sshd_name=centrify-sshd
+          else
+            sshd_name=sshd
+          fi
+          if [ -x /usr/bin/systemctl ]; then
+            systemctl restart $sshd_name.service
+          else
+            /etc/init.d/$sshd_name restart
+          fi
+          r=$?
+          ;;
+      esac
+      exit $r
+    fi
+    exit 0
+  EOH
+  timeout 10
+end
+
+bash 'enable_sshd_challenge_response_auth' do
+  code <<-EOH
+    set -x
+    need_config_ssh=''
+    if test -x /usr/share/centrifydc/sbin/sshd ;then
+      if grep -E '^ChallengeResponseAuthentication[[:space:]][[:space:]]*no[[:space:]]*$' /etc/centrifydc/ssh/sshd_config >/dev/null ; then
+        need_config_ssh='centrifydc'
+        src_conf=/etc/centrifydc/ssh/sshd_config
+        backup_conf=/etc/centrifydc/ssh/sshd_config.deploy_backup
+      fi
+    else
+      if grep -E '^ChallengeResponseAuthentication[[:space:]][[:space:]]*no[[:space:]]*$' /etc/ssh/sshd_config >/dev/null ; then
+        need_config_ssh='stock'
+        src_conf=/etc/ssh/sshd_config
+        backup_conf=/etc/ssh/sshd_config.centrify_backup
+      fi
+    fi
+    r=0
+    if [ "x$need_config_ssh" != "x" ];then
+      [ ! -f $backup_conf ] && cp $src_conf $backup_conf
+      /bin/sed -i -r 's/^ChallengeResponseAuthentication[[:space:]][[:space:]]*no[[:space:]]*$/ChallengeResponseAuthentication yes/g' $src_conf
+      [ $? -ne 0 ] && echo "Update ChallengeResponseAuthentication  failed!" && exit 1
       r=1
       case "#{node[:platform]}" in
         ubuntu)

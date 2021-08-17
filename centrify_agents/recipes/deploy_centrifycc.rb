@@ -1,6 +1,6 @@
 ################################################################################
 #
-# Copyright 2017 Centrify Corporation
+# Copyright 2021 Centrify Corporation
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@
 ################################################################################
 
 $TEMP_DEPLOY_DIR = '/tmp/auto_centrify_deployment'
-$CENTRIFY_REPO_CREDENTIAL = ''
-$CENTRIFYCC_DOWNLOAD_PREFIX='https://edge.centrify.com/products/cloud-service/CliDownload/Centrify'
+$CENTRIFYCC_DOWNLOAD_PREFIX='https://downloads.centrify.com/products/cloud-service/CliDownload/Centrify'
 $CENTRIFYCC_RPM_NAME=''
 
 $CENTRIFYCC_TENANT_URL = ''
@@ -35,13 +34,12 @@ $ec2_instance_id = ''
 all_attribute = ["CENTRIFYCC_TENANT_URL","CENTRIFYCC_ENROLLMENT_CODE","CENTRIFYCC_AGENT_AUTH_ROLES","CENTRIFYCC_FEATURES","CENTRIFYCC_NETWORK_ADDR_TYPE","CENTRIFYCC_COMPUTER_NAME_PREFIX", "CENTRIFYCC_AGENT_SETS"]
 
 ### Check attributes ###
-check_cc_attr = ["CENTRIFY_REPO_CREDENTIAL", "CENTRIFYCC_TENANT_URL", "CENTRIFYCC_ENROLLMENT_CODE", "CENTRIFYCC_FEATURES", "CENTRIFYCC_NETWORK_ADDR_TYPE", "CENTRIFYCC_COMPUTER_NAME_PREFIX"]
+check_cc_attr = ["CENTRIFYCC_TENANT_URL", "CENTRIFYCC_ENROLLMENT_CODE", "CENTRIFYCC_FEATURES", "CENTRIFYCC_NETWORK_ADDR_TYPE", "CENTRIFYCC_COMPUTER_NAME_PREFIX"]
 check_cc_attr.each do |attr|
   if node[attr].class != String
     raise "#{attr} must be a string type!"
   end
 end
-$CENTRIFY_REPO_CREDENTIAL = node["CENTRIFY_REPO_CREDENTIAL"]
 if node['CENTRIFYCC_TENANT_URL'].empty?
   raise 'CENTRIFYCC_TENANT_URL cannot be empty'
 end
