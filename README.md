@@ -1,5 +1,12 @@
 # Instructions
 
+# PUBLIC ARCHIVE
+
+> ***NOTE***
+> This repo is archived.
+> This is still available under the licensing terms, but is not being actively developed or updated any further. Please see [DelineaXPM](https://github.com/DelineaXPM) for active projects.
+
+
 This is the README file for using sample orchestration cookbook 
 automatically to deploy CentrifyDC or CentrifyCC in AWS OpsWorks.
 
